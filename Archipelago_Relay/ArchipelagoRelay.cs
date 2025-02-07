@@ -64,7 +64,22 @@ namespace Archipelago
                     case "Connected":
                         ConnectedGameInformation = new ConnectedCommand(data);
                         await DiscordBot.Log("Successfully ingested Connected packet", "Relay", Discord.LogSeverity.Debug);
-                        //TODO: Grab game files/confirm cache here
+
+                        List<string> gamesInMultiworld = new();
+
+                        // Get a list of games in the multiworld
+                        foreach (SlotInfo slot in ConnectedGameInformation.SlotInfo.Values)
+                        {
+                            if (!gamesInMultiworld.Contains(slot.Game))
+                            {
+                                gamesInMultiworld.Add(slot.Game);
+                            }
+                        }
+                        
+                        // Check with our GameDataManager to see if we have the game information cached already, or if we need more
+
+
+
                         break;
 
                     case "ReceivedItems":
