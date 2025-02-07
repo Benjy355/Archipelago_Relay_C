@@ -131,3 +131,5 @@ $RECYCLE.BIN/
 .DS_Store
 
 _NCrunch*
+/Archipelago_Relay/.vs
+Archipelago_Relay/my_token.txt
