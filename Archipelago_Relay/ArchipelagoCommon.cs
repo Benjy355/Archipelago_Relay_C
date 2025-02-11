@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace Archipelago
 {
+
     // Utility classes for Archipelago stuff
 
     public class SlotData // Player slot information
