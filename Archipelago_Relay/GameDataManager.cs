@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Archipelago.PacketClasses;
 
 namespace Archipelago
 {
@@ -14,18 +15,18 @@ namespace Archipelago
     {
         const string GameDataFolder = "game_item_data";
 
-        public static Dictionary<string, Dictionary<string, object>> GameDataCache = new();
+        public static Dictionary<string, GameObjectIDHash> GameDataCache = new();
 
 
         // Checks for game file either in cache, or failing that, for the file. If found, loads it up and checks to confirm it's up to date. Returns true if we have it, false if we don't.
-        static bool CheckAndLoadGameCache(string game, string checksum)
+        public static bool CheckAndLoadGameCache(string game, string checksum)
         {
             // Escape game name
             game = game.Replace("\\", "_");
             game = game.Replace("/", "_");
             game = game.Replace(":", "_");
 
-            if (GameDataCache.ContainsKey(game) && GameDataCache[game]["checksum"].ToString() == checksum) {
+            if (GameDataCache.ContainsKey(game) && GameDataCache[game].Checksum == checksum) {
                 return true;
             }
 
@@ -39,29 +40,15 @@ namespace Archipelago
             try
             {
                 string json = File.ReadAllText(filePath);
-                Dictionary<string, object> data = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                GameObjectIDHash tempHash = new(json);
 
-                if (!data.ContainsKey("checksum"))
+                if (tempHash.Checksum != checksum)
                 {
                     return false;
                 }
 
-                string fileChecksum = data["checksum"].ToString();
-
-                if (fileChecksum != checksum)
-                {
-                    return false;
-                }
-
-                // We got a good checksum, load the data into the cache
-                if (GameDataCache.ContainsKey(game))
-                {
-                    GameDataCache[game] = data;
-                }
-                else
-                {
-                    GameDataCache.Add(game, data);
-                }
+                GameDataCache[game] = tempHash;
+                DiscordBot.Log($"Successfully loaded cache for {game}", "GameDataManager", Discord.LogSeverity.Debug);
             } 
             catch (Exception ex)
             {
@@ -72,12 +59,25 @@ namespace Archipelago
             return true;
         }
 
-        static void UpdateGameData(string json, string gameName)
+        public static void UpdateGameData(string json, string gameName)
         {
-            Dictionary<string, object> data = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-            //TODO: YOU WERE HERE
+            GameObjectIDHash tempHash = new(json);
+            GameDataCache[gameName] = tempHash;
 
-            //data["item_id_to_name"] = itemIdToName;
+            // Now we save it to a JSON file!
+            string filePath = Path.Combine(GameDataFolder, gameName + ".json");
+            try
+            {
+                if (!Directory.Exists(GameDataFolder))
+                {
+                    Directory.CreateDirectory(GameDataFolder);
+                }
+                File.WriteAllText(filePath, json);
+            }
+            catch (Exception ex)
+            {
+                DiscordBot.Log($"Failed to write game data to {filePath}: {ex.Message}", "GameDataManager", Discord.LogSeverity.Error);
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ namespace Archipelago.PacketClasses
         public List<string> Tags { get; set; }
         public VersionInfo Version { get; set; }
         public int HintCost { get; set; }
+        public Dictionary<string, string> datapackage_checksums { get; set; }
         public int LocationCheckPoints { get; set; }
         public string SeedName { get; set; }
         public double Time { get; set; }
@@ -29,6 +30,13 @@ namespace Archipelago.PacketClasses
             Version = new VersionInfo(temp);
             temp = (JsonElement)jsonPacket["hint_cost"];
             HintCost = temp.GetInt32();
+            datapackage_checksums = new();
+            temp = (JsonElement)jsonPacket["datapackage_checksums"];
+            foreach (var checksum in temp.EnumerateObject())
+            {
+                JsonElement temp2 = (JsonElement)checksum.Value;
+                datapackage_checksums.Add(checksum.Name, temp2.GetString());
+            }
             temp = (JsonElement)jsonPacket["location_check_points"];
             LocationCheckPoints = temp.GetInt32();
             temp = (JsonElement)jsonPacket["seed_name"];
@@ -169,5 +177,97 @@ namespace Archipelago.PacketClasses
         }
     }
 
-    
+    public class GameObjectIDHash
+    {
+        public string Checksum { get; set; }
+        public Dictionary<string, int> ItemNameToID;
+        public Dictionary<int, string> ItemIDToName;
+        public Dictionary<string, int> LocationNameToID;
+        public Dictionary<int, string> LocationIDToName;
+
+        public GameObjectIDHash(string json)
+        {
+            Dictionary<string, object> temp = null;
+            try
+            {
+                temp = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+            } catch
+            {
+                DiscordBot.Log("Failed to parse game cache data from JSON!", "GameObjectIDHash", Discord.LogSeverity.Error);
+            }
+
+            if (temp != null)
+            {
+                Init(temp);
+            }
+        }
+
+        public GameObjectIDHash(Dictionary<string, object> data)
+        {
+            Init(data);
+        }
+
+        protected void Init(Dictionary<string, object> data)
+        {
+            try
+            {
+                Checksum = data["checksum"].ToString();
+
+                // {'item_name_to_id': {'itemname': 1}, 'location_name_to_id': {blah...}}
+                ItemNameToID = new Dictionary<string, int>();
+                ItemIDToName = new Dictionary<int, string>();
+                JsonElement temp = (JsonElement)data["item_name_to_id"];
+                foreach (var obj in temp.EnumerateObject())
+                {
+                    if (!ItemNameToID.ContainsKey(obj.Name))
+                    {
+                        ItemNameToID.Add(obj.Name, obj.Value.GetInt32());
+                    }
+                    else
+                    {
+                        DiscordBot.Log($"Duplicate item name found in game cache data! {obj.Name}", "GameObjectIDHash", Discord.LogSeverity.Warning);
+                    }
+
+                    if (!ItemIDToName.ContainsKey(obj.Value.GetInt32()))
+                    {
+                        ItemIDToName.Add(obj.Value.GetInt32(), obj.Name);
+                    }
+                    else
+                    {
+                        DiscordBot.Log($"Duplicate item ID found in game cache data! {obj.Value.GetInt32()}", "GameObjectIDHash", Discord.LogSeverity.Warning);
+                    }
+                }
+
+                LocationNameToID = new Dictionary<string, int>();
+                LocationIDToName = new Dictionary<int, string>();
+                temp = (JsonElement)data["location_name_to_id"];
+                foreach (var obj in temp.EnumerateObject())
+                {
+                    if (!LocationNameToID.ContainsKey(obj.Name))
+                    {
+                        LocationNameToID.Add(obj.Name, obj.Value.GetInt32());
+                    }
+                    else
+                    {
+                        DiscordBot.Log($"Duplicate location name found in game cache data! {obj.Name}", "GameObjectIDHash", Discord.LogSeverity.Warning);
+                    }
+
+                    if (!LocationIDToName.ContainsKey(obj.Value.GetInt32()))
+                    {
+                        LocationIDToName.Add(obj.Value.GetInt32(), obj.Name);
+                    }
+                    else
+                    {
+                        DiscordBot.Log($"Duplicate location ID found in game cache data! {obj.Value.GetInt32()}", "GameObjectIDHash", Discord.LogSeverity.Warning);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DiscordBot.Log("Failed to parse game cache data from Dict<str,obj>!", "GameObjectIDHash", Discord.LogSeverity.Error);
+                DiscordBot.Log(ex.Message, "GameObjectIDHash", Discord.LogSeverity.Error);
+            }
+        }
+    }
+
 }

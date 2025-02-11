@@ -14,7 +14,7 @@ namespace Archipelago
     {
         public GameData GameData { get; protected set; } // Data gathered from the Archipelago Website
         public int SlotID { get; protected set; } // Which slot will this relay connect to
-        public RoomInfo RoomInfo { get; protected set; } // Provided by the "RoomInfo" cmd
+        public RoomInfo ConnectedRoomInfo { get; protected set; } // Provided by the "RoomInfo" cmd
         public ConnectedCommand ConnectedGameInformation { get; protected set; } // Provided by the "Connected" cmd
         public ReceivedItemsCommand ReceivedItems { get; protected set; }
 
@@ -42,7 +42,7 @@ namespace Archipelago
                 switch (data["cmd"].ToString())
                 {
                     case "RoomInfo":
-                        RoomInfo = new PacketClasses.RoomInfo(data);
+                        ConnectedRoomInfo = new RoomInfo(data);
                         await DiscordBot.Log("Successfully ingested RoomInfo", "Relay", Discord.LogSeverity.Debug);
                         // Now that we have room info, connect as our intended player/slot.
                         responsePayload = new Dictionary<string, object> //TODO: Add password support
@@ -50,7 +50,7 @@ namespace Archipelago
                             { "cmd", "Connect" },
                             { "password", "" },
                             { "name", GameData.slots[SlotID].playerName },
-                            { "version", RoomInfo.Version.SpecialDictionary() },
+                            { "version", ConnectedRoomInfo.Version.SpecialDictionary() },
                             { "tags", new List<String>(["TextOnly", "AP", "DeathLink"]) },
                             { "items_handling", 0b111 },
                             { "uuid", 696942025 },
@@ -75,11 +75,42 @@ namespace Archipelago
                                 gamesInMultiworld.Add(slot.Game);
                             }
                         }
-                        
+
+                        List<string> gamesNeedingCache = new();
                         // Check with our GameDataManager to see if we have the game information cached already, or if we need more
+                        foreach (string game in gamesInMultiworld)
+                        {
+                            if (!GameDataManager.CheckAndLoadGameCache(game, ConnectedRoomInfo.datapackage_checksums[game]))
+                            {
+                                gamesNeedingCache.Add(game);
+                            }
+                        }
+                        // Send required payload to acquire game data
+                        if (gamesNeedingCache.Count > 0)
+                        {
+                            responsePayload = new Dictionary<string, object>
+                            {
+                                { "cmd", "GetDataPackage" },
+                                { "games", gamesNeedingCache }
+                            };
+                            await SchedulePayload(responsePayload);
+                        }
+                        break;
 
-
-
+                    case "DataPackage":
+                        if (data.ContainsKey("data")) {
+                            // data['data'] is a dictionary<string,object> of game data, the only value is "games", which is a dictionary<string,object> of game data
+                            JsonElement subDataDict = (JsonElement)data["data"];
+                            foreach (var gamesDict in subDataDict.EnumerateObject())
+                            {
+                                JsonElement subGameDict = (JsonElement)gamesDict.Value;
+                                foreach (var game in subGameDict.EnumerateObject())
+                                {
+                                    JsonElement gameValueObj = (JsonElement)game.Value;
+                                    GameDataManager.UpdateGameData(gameValueObj.ToString(), game.Name);
+                                }
+                            }
+                        }
                         break;
 
                     case "ReceivedItems":
