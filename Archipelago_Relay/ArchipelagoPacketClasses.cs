@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Discord;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -73,7 +75,7 @@ namespace Archipelago.PacketClasses
             };
         }
     }
-    public class ConnectedCommand
+    public class GameContext
     {
         public int Team { get; set; }
         public int Slot { get; set; }
@@ -83,26 +85,53 @@ namespace Archipelago.PacketClasses
         public Dictionary<int, SlotInfo> SlotInfo { get; set; }
         public int HintPoints { get; set; }
 
-        public ConnectedCommand(Dictionary<string, object> jsonPacket)
+        public GameContext(Dictionary<string, object> archipelagoConnectedPacket)
         {
-            JsonElement temp = (JsonElement)jsonPacket["team"];
+            JsonElement temp = (JsonElement)archipelagoConnectedPacket["team"];
             Team = temp.GetInt32();
-            temp = (JsonElement)jsonPacket["slot"];
+            temp = (JsonElement)archipelagoConnectedPacket["slot"];
             Slot = temp.GetInt32();
-            temp = (JsonElement)jsonPacket["players"];
+            temp = (JsonElement)archipelagoConnectedPacket["players"];
             Players = temp.EnumerateArray().Select(p => new PlayerInfo(p)).ToList();
-            temp = (JsonElement)jsonPacket["missing_locations"];
+            temp = (JsonElement)archipelagoConnectedPacket["missing_locations"];
             MissingLocations = temp.EnumerateArray().Select(m => m.GetInt32()).ToList();
-            temp = (JsonElement)jsonPacket["checked_locations"];
+            temp = (JsonElement)archipelagoConnectedPacket["checked_locations"];
             CheckedLocations = temp.EnumerateArray().Select(c => c.GetInt32()).ToList();
-            temp = (JsonElement)jsonPacket["slot_info"];
+            temp = (JsonElement)archipelagoConnectedPacket["slot_info"];
             SlotInfo = new Dictionary<int, SlotInfo>();
             foreach (var slot in temp.EnumerateObject())
             {
                 SlotInfo.Add(int.Parse(slot.Name), new SlotInfo(slot.Value));
             }
-            temp = (JsonElement)jsonPacket["hint_points"];
+            temp = (JsonElement)archipelagoConnectedPacket["hint_points"];
             HintPoints = temp.GetInt32();
+        }
+
+        public string GetPlayerName(int id)
+        {
+            foreach (PlayerInfo player in Players)
+            {
+                if (player.Slot == id)
+                {
+                    return player.Name;
+                }
+            }
+            return "Unknown";
+        }
+
+        public string GetPlayerGame(int id)
+        {
+            if (SlotInfo.ContainsKey(id))
+            {
+                return SlotInfo[id].Game;
+            }
+            return "Unknown";
+        }
+
+        public string GetItemName(int playerID, int itemID)
+        {
+            string game = GetPlayerGame(playerID);
+            return GameDataManager.GetItemName(game, itemID);
         }
     }
 
@@ -149,12 +178,12 @@ namespace Archipelago.PacketClasses
 
         public ReceivedItemsCommand(Dictionary<string, object> jsonPacket)
         {
-            Cmd = (string)jsonPacket["cmd"];
-            Index = (int)jsonPacket["index"];
+            Cmd = ((JsonElement)jsonPacket["cmd"]).GetString();
+            Index = ((JsonElement)jsonPacket["index"]).GetInt32();
             Items = new List<ItemInfo>();
-            foreach (var item in (List<object>)jsonPacket["items"])
+            foreach (var item in ((JsonElement)jsonPacket["items"]).EnumerateArray())
             {
-                Items.Add(new ItemInfo((Dictionary<string, object>)item));
+                Items.Add(new ItemInfo(item));
             }
         }
     }
@@ -166,6 +195,15 @@ namespace Archipelago.PacketClasses
         public int Player { get; set; }
         public int Flags { get; set; }
         public string Class { get; set; }
+
+        public ItemInfo(JsonElement item)
+        {
+            Item = item.GetProperty("item").GetInt32();
+            Location = item.GetProperty("location").GetInt32();
+            Player = item.GetProperty("player").GetInt32();
+            Flags = item.GetProperty("flags").GetInt32();
+            Class = item.GetProperty("class").GetString();
+        }
 
         public ItemInfo(Dictionary<string, object> item)
         {
@@ -270,4 +308,51 @@ namespace Archipelago.PacketClasses
         }
     }
 
+    public class JSONMessagePart : Dictionary<string, JsonElement> { }
+
+
+    public class PrintJSONPacket
+    {
+        // Original packet that would have been sent by Archipelago Server
+        public Dictionary<string,object> cmdPacket { get; set; }
+        // Message chunks (dictionary containing type of message-part, and associated data)
+        public List<JSONMessagePart> messageData { get; set; }
+        public string type { get; set; }
+        public int team { get; set; }
+        public int slot { get; set; }
+        public ArrayList tags { get; set; }
+
+    
+        public PrintJSONPacket(Dictionary<string,object> cmdPacket)
+        {
+            // TODO, CONTINUE HERE
+            cmdPacket = cmdPacket;
+            type = cmdPacket.ContainsKey("type") ? ((JsonElement)cmdPacket["type"]).GetString() : "unknown";
+            team = cmdPacket.ContainsKey("team") ? ((JsonElement)cmdPacket["team"]).GetInt32() : -1;
+            slot = cmdPacket.ContainsKey("slot") ? ((JsonElement)cmdPacket["slot"]).GetInt32() : -1;
+
+            // Convert the List<Dictionary> stored in the JSON into a.... List<Dictionary>...
+            tags = new();
+            if (cmdPacket.ContainsKey("tags"))
+            {
+                foreach (var tag in ((JsonElement)cmdPacket["tags"]).EnumerateArray())
+                {
+                    tags.Add(tag.GetString());
+                }
+            }
+
+            // Convert the List<Dictionary<...>> stored in the JSON into a.... List<Dictionary<...>>...
+            messageData = new();
+            foreach (var packet in ((JsonElement)cmdPacket["data"]).EnumerateArray())
+            {
+                foreach (var dict in packet.EnumerateObject())
+                {
+                    messageData.Add(new JSONMessagePart
+                    {
+                        { dict.Name, dict.Value }
+                    });
+                }
+            }
+        }
+    }
 }

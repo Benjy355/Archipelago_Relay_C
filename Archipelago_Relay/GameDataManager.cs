@@ -7,6 +7,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Archipelago.PacketClasses;
+using Microsoft.Data.Sqlite;
+using Discord.Rest;
 
 namespace Archipelago
 {
@@ -17,16 +19,15 @@ namespace Archipelago
 
         public static Dictionary<string, GameObjectIDHash> GameDataCache = new();
 
-
         // Checks for game file either in cache, or failing that, for the file. If found, loads it up and checks to confirm it's up to date. Returns true if we have it, false if we don't.
-        public static bool CheckAndLoadGameCache(string game, string checksum)
+        public static bool CheckAndLoadGameCache(string game, string checksum = "")
         {
             // Escape game name
             game = game.Replace("\\", "_");
             game = game.Replace("/", "_");
             game = game.Replace(":", "_");
 
-            if (GameDataCache.ContainsKey(game) && GameDataCache[game].Checksum == checksum) {
+            if (GameDataCache.ContainsKey(game) && (checksum == "" || GameDataCache[game].Checksum == checksum)) {
                 return true;
             }
 
@@ -42,7 +43,7 @@ namespace Archipelago
                 string json = File.ReadAllText(filePath);
                 GameObjectIDHash tempHash = new(json);
 
-                if (tempHash.Checksum != checksum)
+                if (checksum == "" || tempHash.Checksum != checksum)
                 {
                     return false;
                 }
@@ -77,6 +78,21 @@ namespace Archipelago
             catch (Exception ex)
             {
                 DiscordBot.Log($"Failed to write game data to {filePath}: {ex.Message}", "GameDataManager", Discord.LogSeverity.Error);
+            }
+        }
+
+        public static string GetItemName(string game, int itemID)
+        {
+            if (CheckAndLoadGameCache(game))
+            {
+                if (GameDataCache.ContainsKey(game) && GameDataCache[game].ItemIDToName.ContainsKey(itemID))
+                {
+                    return GameDataCache[game].ItemIDToName[itemID];
+                }
+                return $"Unknown Item {itemID}";
+            } else
+            {
+                return $"Unknown Game {game}";
             }
         }
     }

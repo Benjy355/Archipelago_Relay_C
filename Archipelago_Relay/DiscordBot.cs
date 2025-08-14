@@ -50,9 +50,10 @@ public static class DiscordBot
     public static async Task main()
     {
         Client.Log += Log;
+
         var clientConfig = new DiscordSocketConfig
         {
-            GatewayIntents = GatewayIntents.AllUnprivileged
+            GatewayIntents = GatewayIntents.AllUnprivileged & ~GatewayIntents.GuildScheduledEvents & ~GatewayIntents.GuildInvites
         };
 
         try
@@ -95,7 +96,7 @@ public static class DiscordBot
         switch (cmd.Data.Name)
         {
             case "connect":
-                await Log("Connect slash command called", "DiscordBot", LogSeverity.Debug);
+                await Log("Connect Command Called", "DiscordBot", LogSeverity.Debug);
                 await handle_connect(cmd);
                 break;
             default:
@@ -107,12 +108,26 @@ public static class DiscordBot
     // Slash Command functions
     public static async Task handle_connect(SocketSlashCommand cmd)
     {
+        await cmd.DeferAsync(ephemeral: true);
+        await cmd.ModifyOriginalResponseAsync(msg =>
+        {
+            msg.Content = "Please wait...";
+        });
         Archipelago.GameData GameData = await Archipelago.SiteScraper.LoadSiteData(cmd.Data.Options.First().Value.ToString());
         if (GameData == null)
         {
-            await cmd.RespondAsync("Failed to load game data. Please check the link and try again.");
+            await cmd.ModifyOriginalResponseAsync(
+                msg =>
+                {
+                    msg.Content = "Failed to load game data. Please check the link and try again.";
+                });
             return;
         }
+        await cmd.ModifyOriginalResponseAsync(
+            msg =>
+            {
+                msg.Content = "Connecting...";
+            });
         Relay relay = new(GameData);
         Task.Run(() => relay.Connect());
     }
