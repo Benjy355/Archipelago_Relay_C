@@ -1,5 +1,4 @@
-﻿using Archipelago.PacketClasses;
-using Discord.WebSocket;
+﻿using Discord.WebSocket;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,9 +14,6 @@ namespace Archipelago
     {
         public GameData GameData { get; protected set; } // Data gathered from the Archipelago Website
         public int SlotID { get; protected set; } // Which slot will this relay connect to
-        public RoomInfo ConnectedRoomInfo { get; protected set; } // Provided by the "RoomInfo" cmd
-        public GameContext ConnectedGameInformation { get; protected set; } // Provided by the "Connected" cmd
-        public ReceivedItemsCommand ReceivedItems { get; protected set; }
 
         protected List<String> PendingOutgoingPayloads; // List of strings (JSON) to be sent to the archipelago server
         protected ClientWebSocket webSocket;
@@ -49,87 +45,7 @@ namespace Archipelago
                 Dictionary<String, object> responsePayload;
                 switch (data["cmd"].ToString())
                 {
-                    case "RoomInfo":
-                        ConnectedRoomInfo = new RoomInfo(data);
-                        await DiscordBot.Log("Successfully ingested RoomInfo", "Relay", Discord.LogSeverity.Debug);
-                        // Now that we have room info, connect as our intended player/slot.
-                        responsePayload = new Dictionary<string, object> //TODO: Add password support
-                        {
-                            { "cmd", "Connect" },
-                            { "password", "" },
-                            { "name", GameData.slots[SlotID].playerName },
-                            { "version", ConnectedRoomInfo.Version.SpecialDictionary() },
-                            { "tags", new List<String>(["TextOnly", "AP", "DeathLink"]) },
-                            { "items_handling", 0b111 },
-                            { "uuid", 696942025 },
-                            { "game", GameData.slots[SlotID].playerGame },
-                            { "slot_data", false }
-                        };
-
-                        await SchedulePayload(responsePayload);
-                        break;
-
-                    case "Connected":
-                        ConnectedGameInformation = new GameContext(data);
-                        await DiscordBot.Log("Successfully ingested Connected packet", "Relay", Discord.LogSeverity.Debug);
-
-                        List<string> gamesInMultiworld = new();
-
-                        // Get a list of games in the multiworld
-                        foreach (SlotInfo slot in ConnectedGameInformation.SlotInfo.Values)
-                        {
-                            if (!gamesInMultiworld.Contains(slot.Game))
-                            {
-                                gamesInMultiworld.Add(slot.Game);
-                            }
-                        }
-
-                        List<string> gamesNeedingCache = new();
-                        // Check with our GameDataManager to see if we have the game information cached already, or if we need more
-                        foreach (string game in gamesInMultiworld)
-                        {
-                            if (!GameDataManager.CheckAndLoadGameCache(game, ConnectedRoomInfo.datapackage_checksums[game]))
-                            {
-                                gamesNeedingCache.Add(game);
-                            }
-                        }
-                        // Send required payload to acquire game data
-                        if (gamesNeedingCache.Count > 0)
-                        {
-                            responsePayload = new Dictionary<string, object>
-                            {
-                                { "cmd", "GetDataPackage" },
-                                { "games", gamesNeedingCache }
-                            };
-                            await SchedulePayload(responsePayload);
-                        }
-                        break;
-
-                    case "DataPackage":
-                        if (data.ContainsKey("data")) {
-                            // data['data'] is a dictionary<string,object> of game data, the only value is "games", which is a dictionary<string,object> of game data
-                            JsonElement subDataDict = (JsonElement)data["data"];
-                            foreach (var gamesDict in subDataDict.EnumerateObject())
-                            {
-                                JsonElement subGameDict = (JsonElement)gamesDict.Value;
-                                foreach (var game in subGameDict.EnumerateObject())
-                                {
-                                    JsonElement gameValueObj = (JsonElement)game.Value;
-                                    GameDataManager.UpdateGameData(gameValueObj.ToString(), game.Name);
-                                }
-                            }
-                        }
-                        break;
-
-                    case "ReceivedItems":
-                        ReceivedItems = new ReceivedItemsCommand(data);
-                        await DiscordBot.Log("Successfully ingested ReceivedItems packet", "HandleJsonCmd", Discord.LogSeverity.Debug);
-                        break;
-
-                    case "PrintJSON":
-                        string receivedMessage = PrintJSONDecoder.ConvertJSONMessage(new PrintJSONPacket(data), ConnectedGameInformation);
-                        await DiscordBot.Log(receivedMessage, "PrintJSON", Discord.LogSeverity.Verbose);
-                        break;
+                    
 
                     default:
                         throw new Exception($"Unknown JSON command: {data["cmd"].ToString()}");
